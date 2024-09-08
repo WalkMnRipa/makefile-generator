@@ -26,7 +26,7 @@ BLUE = \\033[0;34m
 RESET = \\033[0m
 
 NAME = {name}
-CC = gcc
+CC = cc
 CFLAGS = -Wall -Wextra -Werror
 SRC = {' '.join(src_files)}
 HEADERS = {' '.join(header_files)}
