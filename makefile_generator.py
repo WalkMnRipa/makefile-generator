@@ -1,8 +1,12 @@
+# File: makefile_generator.py
+
 import os
 
-def find_project_files(extensions):
+def find_project_files(extensions, exclude_dirs=None):
     files = []
-    for root, _, filenames in os.walk('.'):
+    for root, dirs, filenames in os.walk('.'):
+        if exclude_dirs:
+            dirs[:] = [d for d in dirs if d not in exclude_dirs]
         for filename in filenames:
             if any(filename.endswith(ext) for ext in extensions):
                 rel_path = os.path.relpath(os.path.join(root, filename))
@@ -39,21 +43,10 @@ CFLAGS = -Wall -Wextra -Werror
         makefile += f"MLXFLAGS = -lmlx -lXext -lX11 -lm\n"
 
     makefile += f"""
-SRC_DIR = src
-CORE_DIR = $(SRC_DIR)/core
-GAME_DIR = $(SRC_DIR)/game
-MAP_DIR = $(SRC_DIR)/map
-GRAPHICS_DIR = $(SRC_DIR)/graphics
-
-SRCS = $(CORE_DIR)/main.c $(CORE_DIR)/init.c $(CORE_DIR)/cleanup.c \\
-       $(GAME_DIR)/game_logic.c $(GAME_DIR)/player_movement.c \\
-       $(MAP_DIR)/map_loader.c $(MAP_DIR)/map_validator.c $(MAP_DIR)/map_utils.c \\
-       $(MAP_DIR)/map_flood_fill.c $(MAP_DIR)/map_copy.c \\
-       $(GRAPHICS_DIR)/render.c $(GRAPHICS_DIR)/render_enemy.c \\
-       $(GAME_DIR)/enemy_movement.c $(GAME_DIR)/enemy_init.c
+SRCS = {' '.join(src_files)}
 
 OBJS_DIR = objs
-OBJS = $(SRCS:$(SRC_DIR)/%.c=$(OBJS_DIR)/%.o)
+OBJS = $(SRCS:%.c=$(OBJS_DIR)/%.o)
 
 """
 
@@ -62,29 +55,26 @@ OBJS = $(SRCS:$(SRC_DIR)/%.c=$(OBJS_DIR)/%.o)
     if use_mlx:
         makefile += f"MLX = {mlx_dir}/libmlx.a\n"
 
-    makefile += """
-all: $(NAME)
-
-$(NAME): $(OBJS) """
+    makefile += "\nall: "
+    if use_mlx:
+        makefile += "$(MLX) "
     if use_libft:
         makefile += "$(LIBFT) "
-    if use_mlx:
-        makefile += "$(MLX)"
-    
-    makefile += f"""
-\t@echo -n "$(YELLOW)Linking project... $(RESET)"
-\t@$(CC) $(CFLAGS) $(OBJS) """
+    makefile += "$(NAME)\n\n"
+
+    makefile += "$(NAME): $(OBJS)\n"
+    makefile += "\t@echo -n \"$(YELLOW)Linking project... $(RESET)\"\n"
+    makefile += f"\t@$(CC) $(CFLAGS) $(OBJS) "
     
     if use_libft:
         makefile += f"-L./{libft_dir} -lft "
     if use_mlx:
         makefile += f"-L./{mlx_dir} $(MLXFLAGS) "
     
-    makefile += """-o $(NAME)
-\t@for i in {1..10}; do echo -n "$(BLUE)█$(RESET)"; sleep 0.1; done
-\t@echo "$(GREEN) Done!$(RESET)"
+    makefile += "-o $(NAME)\n"
+    makefile += "\t@echo \"$(GREEN)Done!$(RESET)\"\n\n"
 
-$(OBJS_DIR)/%.o: $(SRC_DIR)/%.c
+    makefile += """$(OBJS_DIR)/%.o: %.c
 \t@mkdir -p $(@D)
 \t@echo -n "$(YELLOW)Compiling $<... $(RESET)"
 \t@$(CC) $(CFLAGS) -I./includes"""
@@ -99,15 +89,19 @@ $(OBJS_DIR)/%.o: $(SRC_DIR)/%.c
 
 """
 
-    if use_libft:
-        makefile += f"""$(LIBFT):
-\t@make -C {libft_dir}
+    if use_mlx:
+        makefile += f"""$(MLX):
+\t@echo "$(YELLOW)Compiling MLX...$(RESET)"
+\t@$(MAKE) -C {mlx_dir} > /dev/null 2>&1 || (echo "$(YELLOW)MLX compilation failed. Check {mlx_dir} for errors.$(RESET)" && exit 1)
+\t@echo "$(GREEN)MLX compilation successful!$(RESET)"
 
 """
 
-    if use_mlx:
-        makefile += f"""$(MLX):
-\t@$(MAKE) -C {mlx_dir} > /dev/null 2>&1 || (echo "$(YELLOW)MLX compilation failed. Check {mlx_dir} for errors.$(RESET)" && exit 1)
+    if use_libft:
+        makefile += f"""$(LIBFT):
+\t@echo "$(YELLOW)Compiling libft...$(RESET)"
+\t@$(MAKE) -C {libft_dir} > /dev/null 2>&1 || (echo "$(YELLOW)libft compilation failed. Check {libft_dir} for errors.$(RESET)" && exit 1)
+\t@echo "$(GREEN)libft compilation successful!$(RESET)"
 
 """
 
@@ -115,21 +109,19 @@ $(OBJS_DIR)/%.o: $(SRC_DIR)/%.c
 \t@echo -n "$(YELLOW)Cleaning up... $(RESET)"
 """
     if use_libft:
-        makefile += f"\t@make -C {libft_dir} clean > /dev/null 2>&1\n"
+        makefile += f"\t@$(MAKE) -C {libft_dir} clean > /dev/null 2>&1\n"
     if use_mlx:
         makefile += f"\t@$(MAKE) -C {mlx_dir} clean > /dev/null 2>&1\n"
     makefile += """\t@rm -rf $(OBJS_DIR)
-\t@for i in {1..10}; do echo -n "$(BLUE)█$(RESET)"; sleep 0.05; done
-\t@echo "$(GREEN) Done!$(RESET)"
+\t@echo "$(GREEN)Done!$(RESET)"
 
 fclean: clean
 \t@echo -n "$(YELLOW)Full cleanup... $(RESET)"
 """
     if use_libft:
-        makefile += f"\t@make -C {libft_dir} fclean > /dev/null 2>&1\n"
+        makefile += f"\t@$(MAKE) -C {libft_dir} fclean > /dev/null 2>&1\n"
     makefile += f"""\t@rm -f $(NAME)
-\t@for i in {{1..10}}; do echo -n "$(BLUE)█$(RESET)"; sleep 0.05; done
-\t@echo "$(GREEN) Done!$(RESET)"
+\t@echo "$(GREEN)Done!$(RESET)"
 
 re: fclean all
 
@@ -140,9 +132,17 @@ re: fclean all
 
 def main():
     print("Welcome to the Makefile generator!")
-    src_files = find_project_files(['.c'])
-    header_files = find_project_files(['.h'])
     name, use_libft, use_mlx, libft_dir, mlx_dir = get_project_info()
+    
+    exclude_dirs = []
+    if use_libft:
+        exclude_dirs.append(libft_dir)
+    if use_mlx:
+        exclude_dirs.append(mlx_dir)
+    
+    src_files = find_project_files(['.c'], exclude_dirs)
+    header_files = find_project_files(['.h'], exclude_dirs)
+    
     makefile = generate_makefile(name, src_files, header_files, use_libft, use_mlx, libft_dir, mlx_dir)
     
     with open('Makefile', 'w') as f:
