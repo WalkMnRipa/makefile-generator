@@ -27,6 +27,18 @@ def get_project_info():
         mlx_dir = None
     return name, use_libft, use_mlx, libft_dir, mlx_dir
 
+def generate_dependencies(src_files):
+    dependencies = {}
+    for src_file in src_files:
+        deps = set()
+        with open(src_file, 'r') as f:
+            for line in f:
+                if line.strip().startswith('#include "'):
+                    header = line.split('"')[1]
+                    deps.add(header)
+        dependencies[src_file] = list(deps)
+    return dependencies
+
 def generate_makefile(name, src_files, header_files, use_libft, use_mlx, libft_dir, mlx_dir):
     makefile = f"""# Colors
 GREEN = \\033[0;32m
@@ -48,6 +60,8 @@ SRCS = {' '.join(src_files)}
 OBJS_DIR = objs
 OBJS = $(SRCS:%.c=$(OBJS_DIR)/%.o)
 
+DEPS = $(OBJS:.o=.d)
+
 """
 
     if use_libft:
@@ -55,21 +69,21 @@ OBJS = $(SRCS:%.c=$(OBJS_DIR)/%.o)
     if use_mlx:
         makefile += f"MLX = {mlx_dir}/libmlx.a\n"
 
-    makefile += "\nall: "
-    if use_mlx:
-        makefile += "$(MLX) "
-    if use_libft:
-        makefile += "$(LIBFT) "
-    makefile += "$(NAME)\n\n"
+    makefile += "\nall: $(NAME)\n\n"
 
-    makefile += "$(NAME): $(OBJS)\n"
+    makefile += "$(NAME): $(OBJS)"
+    if use_libft:
+        makefile += " $(LIBFT)"
+    if use_mlx:
+        makefile += " $(MLX)"
+    makefile += "\n"
     makefile += "\t@echo -n \"$(YELLOW)Linking project... $(RESET)\"\n"
     makefile += f"\t@$(CC) $(CFLAGS) $(OBJS) "
     
     if use_libft:
-        makefile += f"-L./{libft_dir} -lft "
+        makefile += f"-L{libft_dir} -lft "
     if use_mlx:
-        makefile += f"-L./{mlx_dir} $(MLXFLAGS) "
+        makefile += f"-L{mlx_dir} $(MLXFLAGS) "
     
     makefile += "-o $(NAME)\n"
     makefile += "\t@echo \"$(GREEN)Done!$(RESET)\"\n\n"
@@ -77,12 +91,12 @@ OBJS = $(SRCS:%.c=$(OBJS_DIR)/%.o)
     makefile += """$(OBJS_DIR)/%.o: %.c
 \t@mkdir -p $(@D)
 \t@echo -n "$(YELLOW)Compiling $<... $(RESET)"
-\t@$(CC) $(CFLAGS) -I./includes"""
+\t@$(CC) $(CFLAGS) -MMD -MP -I./includes"""
     
     if use_libft:
-        makefile += f" -I./{libft_dir}"
+        makefile += f" -I{libft_dir}"
     if use_mlx:
-        makefile += f" -I./{mlx_dir}"
+        makefile += f" -I{mlx_dir}"
     
     makefile += """ -c $< -o $@
 \t@echo "$(GREEN)Done!$(RESET)"
@@ -92,7 +106,7 @@ OBJS = $(SRCS:%.c=$(OBJS_DIR)/%.o)
     if use_mlx:
         makefile += f"""$(MLX):
 \t@echo "$(YELLOW)Compiling MLX...$(RESET)"
-\t@$(MAKE) -C {mlx_dir} > /dev/null 2>&1 || (echo "$(YELLOW)MLX compilation failed. Check {mlx_dir} for errors.$(RESET)" && exit 1)
+\t@$(MAKE) -C {mlx_dir} > /dev/null
 \t@echo "$(GREEN)MLX compilation successful!$(RESET)"
 
 """
@@ -100,7 +114,7 @@ OBJS = $(SRCS:%.c=$(OBJS_DIR)/%.o)
     if use_libft:
         makefile += f"""$(LIBFT):
 \t@echo "$(YELLOW)Compiling libft...$(RESET)"
-\t@$(MAKE) -C {libft_dir} > /dev/null 2>&1 || (echo "$(YELLOW)libft compilation failed. Check {libft_dir} for errors.$(RESET)" && exit 1)
+\t@$(MAKE) -C {libft_dir} > /dev/null
 \t@echo "$(GREEN)libft compilation successful!$(RESET)"
 
 """
@@ -109,9 +123,9 @@ OBJS = $(SRCS:%.c=$(OBJS_DIR)/%.o)
 \t@echo -n "$(YELLOW)Cleaning up... $(RESET)"
 """
     if use_libft:
-        makefile += f"\t@$(MAKE) -C {libft_dir} clean > /dev/null 2>&1\n"
+        makefile += f"\t@$(MAKE) -C {libft_dir} > /dev/null\n"
     if use_mlx:
-        makefile += f"\t@$(MAKE) -C {mlx_dir} clean > /dev/null 2>&1\n"
+        makefile += f"\t@$(MAKE) -C {mlx_dir} > /dev/null\n"
     makefile += """\t@rm -rf $(OBJS_DIR)
 \t@echo "$(GREEN)Done!$(RESET)"
 
@@ -119,14 +133,17 @@ fclean: clean
 \t@echo -n "$(YELLOW)Full cleanup... $(RESET)"
 """
     if use_libft:
-        makefile += f"\t@$(MAKE) -C {libft_dir} fclean > /dev/null 2>&1\n"
+        makefile += f"\t@$(MAKE) -C {libft_dir} > /dev/null\n"
+    if use_mlx:
+        makefile += f"\t@$(MAKE) -C {mlx_dir} > /dev/null\n"
     makefile += f"""\t@rm -f $(NAME)
 \t@echo "$(GREEN)Done!$(RESET)"
 
 re: fclean all
 
-.PHONY: all clean fclean re
-"""
+.PHONY: all clean fclean re"""
+
+    makefile += "\n\n-include $(DEPS)\n"
 
     return makefile
 
